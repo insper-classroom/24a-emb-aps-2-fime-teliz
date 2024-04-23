@@ -31,6 +31,11 @@ const int MPU_ADDRESS = 0x68;
 const int I2C_SDA_GPIO = 4;
 const int I2C_SCL_GPIO = 5;
 
+const char IMU_X_HW_ID = 1;
+const char IMU_Y_HW_ID = 2;
+const char ADC_HW_ID = 3;
+const char EOP = -1;
+
 typedef struct adc {
     int axis;
     int val;
@@ -42,22 +47,33 @@ typedef struct movement {
 } movement_t;
 
 QueueHandle_t xQueueAdc;
+QueueHandle_t xQueueIMU;
 movement_t *movement;
 
 
 void uart_task(void *p) {
     adc_t adcData;
-
+    adc_t imuData;
     while (1) {
         if (xQueueReceive(xQueueAdc, &adcData, portMAX_DELAY)) {
+            int axis = adcData.axis;
             int val = adcData.val;
-            int msb = val >> 8;
+
+            uart_putc_raw(uart0, ADC_HW_ID);
+            uart_putc_raw(uart0, axis);
+            uart_putc_raw(uart0, val);
+            uart_putc_raw(uart0, EOP);
+        }
+        if (xQueueReceive(xQueueIMU, &imuData, portMAX_DELAY)) {
+            int val = imuData.val;
+            int msb = val >> 8; 
             int lsb = val & 0xFF;
 
-            uart_putc_raw(uart0, adcData.axis);
+            uart_putc_raw(uart0, IMU_X_HW_ID);
+            uart_putc_raw(uart0, imuData.axis);
             uart_putc_raw(uart0, msb);
             uart_putc_raw(uart0, lsb);
-            uart_putc_raw(uart0, -1);
+            uart_putc_raw(uart0, EOP);
         }
     }
 }
@@ -136,10 +152,15 @@ void hc06_task(void *p) {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
         else{
-            adc_t data;
+            adc_t data_ADC_HC06;
             xQueueAdc = xQueueCreate(10, sizeof(adc_t));
+            xQueueReceive(xQueueAdc, &data_ADC_HC06, portMAX_DELAY);
 
-            xQueueReceive(xQueueAdc, &data, portMAX_DELAY);
+            adc_t data_IMU_HC06;
+            xQueueIMU = xQueueCreate(10, sizeof(adc_t));
+            xQueueReceive(xQueueIMU, &data_IMU_HC06, portMAX_DELAY);
+
+
         }
 
     }
@@ -200,7 +221,7 @@ void mpu6050_task(void *p) {
     gpio_pull_up(I2C_SDA_GPIO);
     gpio_pull_up(I2C_SCL_GPIO);
 
-    adc_t adcData;
+    adc_t imuData;
 
     mpu6050_reset();
     FusionAhrs ahrs;
@@ -227,16 +248,16 @@ FusionVector accelerometer = {
         const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
        // printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
-        adcData.val = (int) euler.angle.roll;
-        adcData.axis = 1;
+        imuData.val = (int) euler.angle.roll;
+        imuData.axis = 1;
      //   printf("Roll %0.1f\n", euler.angle.roll);
 
-        xQueueSend(xQueueAdc, &adcData, portMAX_DELAY);
+        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
 
-        adcData.val = (int) euler.angle.yaw;
-        adcData.axis = 0;
+        imuData.val = (int) euler.angle.yaw;
+        imuData.axis = 0;
         //printf("Yaw %0.1f\n", euler.angle.yaw);
-        xQueueSend(xQueueAdc, &adcData, portMAX_DELAY);
+        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -268,6 +289,7 @@ int main() {
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
 */
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
+    xQueueIMU = xQueueCreate(32, sizeof(adc_t));
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
     xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
