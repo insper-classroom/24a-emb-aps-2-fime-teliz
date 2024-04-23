@@ -23,14 +23,13 @@
 #include "hc06.h"
 
 #define deadzone 120
-#define SAMPLE_PERIOD 0.01f
+#define SAMPLE_PERIOD 0.1f
 
 volatile int ADC_X = 16;
 volatile int ADC_Y = 17;
-volatile int I2C_PORT = 0;
-volatile int I2C_SDA_GPIO = 20;
-volatile int I2C_SCL_GPIO = 21;
-
+const int MPU_ADDRESS = 0x68;
+const int I2C_SDA_GPIO = 4;
+const int I2C_SCL_GPIO = 5;
 
 typedef struct adc {
     int axis;
@@ -46,6 +45,22 @@ QueueHandle_t xQueueAdc;
 movement_t *movement;
 
 
+void uart_task(void *p) {
+    adc_t adcData;
+
+    while (1) {
+        if (xQueueReceive(xQueueAdc, &adcData, portMAX_DELAY)) {
+            int val = adcData.val;
+            int msb = val >> 8;
+            int lsb = val & 0xFF;
+
+            uart_putc_raw(uart0, adcData.axis);
+            uart_putc_raw(uart0, msb);
+            uart_putc_raw(uart0, lsb);
+            uart_putc_raw(uart0, -1);
+        }
+    }
+}
 
 void x_adc_task(void *p) {
     adc_t data;
@@ -138,28 +153,52 @@ void hc06_task(void *p) {
     }
 }
 static void mpu6050_reset() {
-    // Two byte reset. First byte register, second byte data
-    // There are a load more options to set up the device in different ways that could be added here
-    uint8_t buf[] = {0x6B, 0x80};
-    i2c_write_blocking(i2c_default, MPU6050_I2C_DEFAULT, buf, 2, false);
+    uint8_t resetBuffer[] = {0x6B, 0x00};
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, resetBuffer, 2, false);
+
+    uint8_t writeBuffer[2];
+    writeBuffer[0] = MPUREG_ACCEL_CONFIG;
+    writeBuffer[1] = 0 << 3;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, writeBuffer, 2, false);
+
+    writeBuffer[0] = MPUREG_ACCEL_CONFIG;
+    writeBuffer[1] = 0 << 4;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, writeBuffer, 2, false);
+
+    writeBuffer[0] = MPUREG_GYRO_CONFIG;
+    writeBuffer[1] = 0 << 3;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, writeBuffer, 2, false);
+
+    writeBuffer[0] = MPUREG_GYRO_CONFIG;
+    writeBuffer[1] = 0 << 4;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, writeBuffer, 2, false);
 }
-static void mpu6050_read_raw(int16_t *accel, int16_t *gyro) {
+static void mpu6050_read_raw(int16_t accel[3], int16_t gyro[3], int16_t *temp) {
+    uint8_t readBuffer[6];
 
-    uint8_t buffer[14];
-    uint8_t val = 0x38;
+    uint8_t val = 0x3B;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, &val, 1, true);
+    i2c_read_blocking(i2c_default, MPU_ADDRESS, readBuffer, 6, false);
 
+    for (int i = 0; i < 3; i++) {
+        accel[i] = (readBuffer[i * 2] << 8 | readBuffer[(i * 2) + 1]);
+    }
 
-    i2c_write_blocking(i2c_default, MPU6050_I2C_DEFAULT, &val, 1, true);
-    i2c_read_blocking(i2c_default, MPU6050_I2C_DEFAULT, buffer, 14, false);
+    val = 0x43;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, &val, 1, true);
+    i2c_read_blocking(i2c_default, MPU_ADDRESS, readBuffer, 6, false);
 
-    accel[0] = (buffer[0] << 8) | buffer[1];
-    accel[1] = (buffer[2] << 8) | buffer[3];
-    accel[2] = (buffer[4] << 8) | buffer[5];
+    for (int i = 0; i < 3; i++) {
+        gyro[i] = (readBuffer[i * 2] << 8 | readBuffer[(i * 2) + 1]);
+    }
 
-    gyro[0] = (buffer[8] << 8) | buffer[9];
-    gyro[1] = (buffer[10] << 8) | buffer[11];
-    gyro[2] = (buffer[12] << 8) | buffer[13];
+    val = 0x41;
+    i2c_write_blocking(i2c_default, MPU_ADDRESS, &val, 1, true);
+    i2c_read_blocking(i2c_default, MPU_ADDRESS, readBuffer, 2, false);
+
+    *temp = readBuffer[0] << 8 | readBuffer[1];
 }
+
 
 
 void mpu6050_task(void *p) {
@@ -169,37 +208,46 @@ void mpu6050_task(void *p) {
     gpio_pull_up(I2C_SDA_GPIO);
     gpio_pull_up(I2C_SCL_GPIO);
 
+    adc_t adcData;
+
     mpu6050_reset();
     FusionAhrs ahrs;
     FusionAhrsInitialise(&ahrs);
 
-    int16_t acceleration[3], gyro[3];
+    int16_t acceleration[3], gyro[3], temp;
 
-    while(1) {
-        mpu6050_read_raw(acceleration, gyro);
+    while (1) {
+        mpu6050_read_raw(acceleration, gyro, &temp);
+ FusionVector gyroscope = {
+    .axis.x = gyro[0] / 131.0f, // Conversão para graus/s
+    .axis.y = gyro[1] / 131.0f,
+    .axis.z = gyro[2] / 131.0f,
+};
 
-        FusionVector gyroscope = {
-            .axis.x = gyro[0] / 131.0f, // Conversão para graus/s
-            .axis.y = gyro[1] / 131.0f,
-            .axis.z = gyro[2] / 131.0f,
-        };
-
-        FusionVector accelerometer = {
-            .axis.x = acceleration[0] / 16384.0f, // Conversão para g
-            .axis.y = acceleration[1] / 16384.0f,
-            .axis.z = acceleration[2] / 16384.0f,
-        };
+FusionVector accelerometer = {
+    .axis.x = acceleration[0] / 16384.0f, // Conversão para g
+    .axis.y = acceleration[1] / 16384.0f,
+    .axis.z = acceleration[2] / 16384.0f,
+};      
 
         FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, SAMPLE_PERIOD);
 
-        FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
-        printf("Accel x: %0.2f g, y: %0.2f g, z: %0.2f g\n", accelerometer.axis.x, accelerometer.axis.y, accelerometer.axis.z);
-        printf("Gyro x: %0.2f deg/s, y: %0.2f deg/s, z: %0.2f deg/s\n", gyroscope.axis.x, gyroscope.axis.y, gyroscope.axis.z);
-    
-        vTaskDelay(pdMS_TO_TICKS(1000));
+       // printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
+        adcData.val = (int) euler.angle.roll;
+        adcData.axis = 1;
+     //   printf("Roll %0.1f\n", euler.angle.roll);
+
+        xQueueSend(xQueueAdc, &adcData, portMAX_DELAY);
+
+        adcData.val = (int) euler.angle.yaw;
+        adcData.axis = 0;
+        //printf("Yaw %0.1f\n", euler.angle.yaw);
+        xQueueSend(xQueueAdc, &adcData, portMAX_DELAY);
+        
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
-
 }
 
 void task_tes( void *p) {
@@ -228,7 +276,7 @@ int main() {
     xTaskCreate(task_tes, "Task Teste", 4096, NULL, 1, NULL);
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
 */
-    
+    xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
 

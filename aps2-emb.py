@@ -12,7 +12,7 @@ try:
             if data == b'\xff':
                 break
 
-        Read 4 bytes from UART
+        #Read 4 bytes from UART
         data = ser.read(1)
         print(data)
 
