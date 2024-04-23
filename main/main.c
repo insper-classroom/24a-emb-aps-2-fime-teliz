@@ -22,11 +22,11 @@
 
 #include "hc06.h"
 
-#define deadzone 120
+#define deadzone 220
 #define SAMPLE_PERIOD 0.1f
 
-volatile int ADC_X = 16;
-volatile int ADC_Y = 17;
+volatile int ADC_X = 26;
+volatile int ADC_Y = 27;
 const int MPU_ADDRESS = 0x68;
 const int I2C_SDA_GPIO = 4;
 const int I2C_SCL_GPIO = 5;
@@ -75,16 +75,14 @@ void x_adc_task(void *p) {
         result = result / 8;
 
         if (abs(result) < deadzone) {
-            result = 0;
-            //movement->x = 0;
-        }else{
-            //movement->x = result/abs(result);
-            }
+            data.val = 0; // resultado pode ser 2 ou -2 (vai ser lido pelo python)
+        }else{            
+            data.val = 2*result/abs(result); // resultado pode ser 2 ou -2 (vai ser lido pelo python)
 
-        data.val = result;
+        }
         data.axis = 1;
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        printf("X: %d\n", data.val);
+        //printf("X: %d\n", data.val);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -101,16 +99,16 @@ void y_adc_task(void *p) {
         result = result - 2048;
         result = result / 8;
 
+        
         if (abs(result) < deadzone) {
-            result = 0;
-            //movement->y = 0;
-        }else{
-            //movement->y = result/abs(result);
+            data.val = 0; // resultado pode ser 2 ou -2 (vai ser lido pelo python)
+        }else{            
+            data.val = 2*result/abs(result); // resultado pode ser 2 ou -2 (vai ser lido pelo python)
+
         }
-        data.val = result;
         data.axis = 0;
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        printf("Y: %d\n", data.val);
+        //printf("Y: %d\n", data.val);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -118,12 +116,12 @@ void y_adc_task(void *p) {
 
 
 void hc06_task(void *p) {
-    int connected;
+    int connected=1;
     uart_init(HC06_UART_ID, HC06_BAUD_RATE);
     gpio_set_function(HC06_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(HC06_RX_PIN, GPIO_FUNC_UART);
     
-    hc06_init("HC06", "6");
+    //hc06_init("HC06", "6");
 
     while (true) {
         //uart_puts(HC06_UART_ID, "OLAAA ");
@@ -142,12 +140,6 @@ void hc06_task(void *p) {
             xQueueAdc = xQueueCreate(10, sizeof(adc_t));
 
             xQueueReceive(xQueueAdc, &data, portMAX_DELAY);
-            printf("Axis: %d, Value: %d\n", data.axis, data.val);
-            printf("X: %d, Y: %d\n", movement->x, movement->y);
-            // É AQUI QUE A GENTE MANDA O MOVIMENTO PRO PYTHON;
-            // SE X FOR 1, MANDA PRA DIREITA, SE FOR -1, MANDA PRA ESQUERDA
-            // SE Y FOR 1, MANDA PRA FRENTE, SE FOR -1, MANDA PRA TRAS
-
         }
 
     }
@@ -272,13 +264,13 @@ int main() {
 
     printf("Start bluetooth task\n");
 /*
-    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(task_tes, "Task Teste", 4096, NULL, 1, NULL);
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
 */
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
+    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
 
 
     vTaskStartScheduler();
