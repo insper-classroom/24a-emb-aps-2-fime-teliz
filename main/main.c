@@ -20,7 +20,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "hc06.h"
+#include "hc05.h"
+#include "hc05.c"
 
 #define deadzone 220
 #define SAMPLE_PERIOD 0.05f
@@ -133,16 +134,16 @@ void y_adc_task(void *p) {
 
 void hc06_task(void *p) {
     int connected=1;
-    uart_init(HC06_UART_ID, HC06_BAUD_RATE);
-    gpio_set_function(HC06_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(HC06_RX_PIN, GPIO_FUNC_UART);
+    uart_init(hc05_UART_ID, hc05_BAUD_RATE);
+    gpio_set_function(hc05_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(hc05_RX_PIN, GPIO_FUNC_UART);
     
-    //hc06_init("HC06", "6");
+    hc05_init("vara_de_pesca", "0000");
 
     while (true) {
         //uart_puts(HC06_UART_ID, "OLAAA ");
         if (connected == 0){
-            if (hc06_check_connection()){
+            if (hc05_check_connection()){
             printf("Connected\n");
             connected = 1;
             } else {
