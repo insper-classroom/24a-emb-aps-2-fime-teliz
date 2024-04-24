@@ -37,6 +37,8 @@ const char IMU_Y_HW_ID = 2;
 const char ADC_HW_ID = 3;
 const char EOP = -1;
 
+volatile int camera_lock_flag = 0;
+
 typedef struct adc {
     int axis;
     int val;
@@ -253,7 +255,8 @@ FusionVector accelerometer = {
 
         const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
-        if(count == 0){
+        if (camera_lock_flag == 0){
+            if(count == 0){
             oldatar = (int) euler.angle.roll;
             oldatay = (int) euler.angle.yaw;
         }
@@ -269,6 +272,7 @@ FusionVector accelerometer = {
             count = 0;
         }
         count ++;
+        }
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
