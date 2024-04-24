@@ -23,7 +23,7 @@
 #include "hc06.h"
 
 #define deadzone 220
-#define SAMPLE_PERIOD 0.1f
+#define SAMPLE_PERIOD 0.05f
 
 volatile int ADC_X = 26;
 volatile int ADC_Y = 27;
@@ -228,6 +228,11 @@ void mpu6050_task(void *p) {
     FusionAhrsInitialise(&ahrs);
 
     int16_t acceleration[3], gyro[3], temp;
+    int count = 0;
+    int oldatar;
+    int newdatar;
+    int oldatay;
+    int newdatay;
 
     while (1) {
         mpu6050_read_raw(acceleration, gyro, &temp);
@@ -247,19 +252,23 @@ FusionVector accelerometer = {
 
         const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
-       // printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
-        imuData.val = (int) euler.angle.roll;
-        imuData.axis = 1;
-     //   printf("Roll %0.1f\n", euler.angle.roll);
-
-        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-
-        imuData.val = (int) euler.angle.yaw;
-        imuData.axis = 0;
-        //printf("Yaw %0.1f\n", euler.angle.yaw);
-        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-        
-        vTaskDelay(pdMS_TO_TICKS(100));
+        if(count == 0){
+            oldatar = (int) euler.angle.roll;
+            oldatay = (int) euler.angle.yaw;
+        }
+        else if(count == 9){
+            newdatar = (int) euler.angle.roll;
+            newdatay = (int) euler.angle.yaw;
+            imuData.val = newdatar - oldatar;
+            imuData.axis = 1;
+            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+            imuData.val = newdatay - oldatay;
+            imuData.axis = 0;
+            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+            count = 0;
+        }
+        count ++;
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
