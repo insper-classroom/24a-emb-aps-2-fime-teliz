@@ -454,16 +454,16 @@ int main() {
     //////printf("Start bluetooth task\n");
 
 
-/*
+
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
+    //xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
     xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
     xTaskCreate(task_macro, "Macro_Task", 4096, NULL, 1, NULL);
     xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
     xTaskCreate(btn_line_task, "Line_Task", 4096, NULL, 1, NULL);
-*/
+
 
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xQueueIMU = xQueueCreate(32, sizeof(adc_t));
