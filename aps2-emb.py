@@ -69,6 +69,9 @@ try:
                 data = ser.read(1)
                 value = int.from_bytes(data, byteorder='big', signed=True)
                 if value == 1:
+                    pyautogui.mouseDown()
+                else:
+                    pyautogui.mouseUp()
 
 
 

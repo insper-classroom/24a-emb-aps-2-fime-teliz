@@ -31,6 +31,7 @@ volatile int ADC_Y = 27;
 const int MPU_ADDRESS = 0x68;
 const int I2C_SDA_GPIO = 4;
 const int I2C_SCL_GPIO = 5;
+const int BTN_MACRO = 15;
 
 const char IMU_X_HW_ID = 1;
 const char IMU_Y_HW_ID = 2;
@@ -52,16 +53,34 @@ typedef struct movement {
     int y;
 } movement_t;
 
+QueueHandle_t xQueueBtn;
 QueueHandle_t xQueueAdc;
 QueueHandle_t xQueueIMU;
 movement_t *movement;
 
 
+void macro_task(void *p){
+
+    // configurar botao balalalalala
+    while(1) {
+        if (gpio_get(14) == 0){
+            // coloca dado na fila do botao falando que ele foi pressionado 
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else {
+
+
+        }
+
+    }
+
+}
+
 void uart_task(void *p) {
     adc_t adcData;
     adc_t imuData;
+    int btnData;
     while (1) {
-        if (xQueueReceive(xQueueAdc, &adcData, portMAX_DELAY)) {
+        if (xQueueReceive(xQueueAdc, &adcData, 10)) {
             int axis = adcData.axis;
             int val = adcData.val;
 
@@ -70,7 +89,7 @@ void uart_task(void *p) {
             uart_putc_raw(uart0, val);
             uart_putc_raw(uart0, EOP);
         }
-        if (xQueueReceive(xQueueIMU, &imuData, portMAX_DELAY)) {
+        if (xQueueReceive(xQueueIMU, &imuData, 10)) {
             int val = imuData.val;
             int msb = val >> 8; 
             int lsb = val & 0xFF;
@@ -79,6 +98,11 @@ void uart_task(void *p) {
             uart_putc_raw(uart0, imuData.axis);
             uart_putc_raw(uart0, msb);
             uart_putc_raw(uart0, lsb);
+            uart_putc_raw(uart0, EOP);
+        }
+        if (xQueueReceive(xQueueBtn, &btnData, 10)) {
+            uart_putc_raw(uart0, 5);
+            uart_putc_raw(uart0, btnData);
             uart_putc_raw(uart0, EOP);
         }
     }
@@ -192,6 +216,7 @@ static void mpu6050_reset() {
     writeBuffer[1] = 0 << 4;
     i2c_write_blocking(i2c_default, MPU_ADDRESS, writeBuffer, 2, false);
 }
+
 static void mpu6050_read_raw(int16_t accel[3], int16_t gyro[3], int16_t *temp) {
     uint8_t readBuffer[6];
 
@@ -280,6 +305,27 @@ FusionVector accelerometer = {
     }
 }
 
+
+
+void task_macro( void *p) {
+    // TODO configuira pino entrada
+    int status = 0;
+    gpio_init(BTN_MACRO);
+    gpio_set_dir(BTN_MACRO, GPIO_IN);
+    gpio_pull_up(BTN_MACRO);
+    while(1){
+        if (gpio_get(BTN_MACRO) == 0){
+            status = 1;
+            xQueueSend(xQueueBtn, &status, 0);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+
+            status = 0;
+            xQueueSend(xQueueBtn, &status, 0);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 void rotate_task(void *p) {
     static const int8_t state_table[] = {
         0, -1,  1,  0,
@@ -342,19 +388,23 @@ void rotate_task(void *p) {
         vTaskDelay(pdMS_TO_TICKS(1)); // Poll every 1 ms to improve responsiveness
     }
 }
+
 int main() {
     stdio_init_all();
 
     printf("Start bluetooth task\n");
 /*
     xTaskCreate(task_tes, "Task Teste", 4096, NULL, 1, NULL);
-    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
+        xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
+    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
 */
+
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xQueueIMU = xQueueCreate(32, sizeof(adc_t));
+    xQueueBtn = xQueueCreate(32, sizeof(int));
+
     xTaskCreate(rotate_task, "Rotate_Task", 4096, NULL, 1, NULL);
 
 
