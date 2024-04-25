@@ -62,8 +62,8 @@ try:
                 value = int.from_bytes(data, byteorder='big', signed=True)
                 if value == 1:
                     pyautogui.mouseDown(button='right')
-
-            pyautogui.mouseUp(button='right')
+                else:
+                    pyautogui.mouseUp(button='right')
 
             if data == b'\x05':
                 data = ser.read(1)
@@ -72,7 +72,13 @@ try:
                     pyautogui.mouseDown()
                 else:
                     pyautogui.mouseUp()
-
+            if data == b'\x06':
+                data = ser.read(1)
+                value = int.from_bytes(data, byteorder='big', signed=True)
+                if value == 1:
+                    pyautogui.scroll(1)
+                elif value == 2:
+                    pyautogui.scroll(-1)
 
 
                 

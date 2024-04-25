@@ -41,6 +41,9 @@ const char EOP = -1;
 const int ENCA_PIN = 17;
 const int ENCB_PIN = 16;
 
+const int BTN_LINE = 18;
+const int BTN_LOCK = 19;
+
 volatile int camera_lock_flag = 0;
 
 typedef struct adc {
@@ -53,9 +56,11 @@ typedef struct movement {
     int y;
 } movement_t;
 
-QueueHandle_t xQueueBtn;
+QueueHandle_t xQueueMacro;
 QueueHandle_t xQueueAdc;
 QueueHandle_t xQueueIMU;
+QueueHandle_t xQueueLine;
+QueueHandle_t xQueueScroll;
 movement_t *movement;
 
 
@@ -78,7 +83,9 @@ void macro_task(void *p){
 void uart_task(void *p) {
     adc_t adcData;
     adc_t imuData;
-    int btnData;
+    int macroData;
+    int lineData;
+    int scrollData;
     while (1) {
         if (xQueueReceive(xQueueAdc, &adcData, 10)) {
             int axis = adcData.axis;
@@ -93,18 +100,39 @@ void uart_task(void *p) {
             int val = imuData.val;
             int msb = val >> 8; 
             int lsb = val & 0xFF;
-
-            uart_putc_raw(uart0, IMU_X_HW_ID);
-            uart_putc_raw(uart0, imuData.axis);
-            uart_putc_raw(uart0, msb);
-            uart_putc_raw(uart0, lsb);
-            uart_putc_raw(uart0, EOP);
+            if (imuData.axis == 0) {
+                if (val>75){
+                uart_putc_raw(uart0, IMU_Y_HW_ID);
+                uart_putc_raw(uart0, 1);
+                uart_putc_raw(uart0, EOP);
+                }else{
+                    uart_putc_raw(uart0, IMU_Y_HW_ID);
+                    uart_putc_raw(uart0, 0);
+                    uart_putc_raw(uart0, EOP);
+                }
+            } else {
+                uart_putc_raw(uart0, IMU_X_HW_ID);
+                uart_putc_raw(uart0, msb);
+                uart_putc_raw(uart0, lsb);
+                uart_putc_raw(uart0, EOP);
+            }
         }
-        if (xQueueReceive(xQueueBtn, &btnData, 10)) {
+        if (xQueueReceive(xQueueMacro, &macroData, 10)) {
             uart_putc_raw(uart0, 5);
-            uart_putc_raw(uart0, btnData);
+            uart_putc_raw(uart0, macroData);
             uart_putc_raw(uart0, EOP);
         }
+        if (xQueueReceive(xQueueLine, &lineData, 10)) {
+            uart_putc_raw(uart0, 4);
+            uart_putc_raw(uart0, lineData);
+            uart_putc_raw(uart0, EOP);
+        }
+        if (xQueueReceive(xQueueScroll, &scrollData, 10)) {
+            uart_putc_raw(uart0, 6);
+            uart_putc_raw(uart0, scrollData);
+            uart_putc_raw(uart0, EOP);
+        }
+
     }
 }
 
@@ -286,21 +314,19 @@ FusionVector accelerometer = {
         if (camera_lock_flag == 0){
             if(count == 0){
             oldatar = (int) euler.angle.roll;
-            oldatay = (int) euler.angle.yaw;
-        }
-        else if(count == 9){
-            newdatar = (int) euler.angle.roll;
-            newdatay = (int) euler.angle.yaw;
-            imuData.val = newdatar - oldatar;
-            imuData.axis = 1;
-            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-            imuData.val = newdatay - oldatay;
-            imuData.axis = 0;
-            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-            count = 0;
-        }
+            }
+            else if(count == 9){
+                newdatar = (int) euler.angle.roll;
+                imuData.val = newdatar - oldatar;
+                imuData.axis = 1;
+                xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+                count = 0;
+            }
         count ++;
         }
+        imuData.val = (int) euler.angle.yaw;
+        imuData.axis = 0;
+        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -308,7 +334,6 @@ FusionVector accelerometer = {
 
 
 void task_macro( void *p) {
-    // TODO configuira pino entrada
     int status = 0;
     gpio_init(BTN_MACRO);
     gpio_set_dir(BTN_MACRO, GPIO_IN);
@@ -316,17 +341,17 @@ void task_macro( void *p) {
     while(1){
         if (gpio_get(BTN_MACRO) == 0){
             status = 1;
-            xQueueSend(xQueueBtn, &status, 0);
+            xQueueSend(xQueueMacro, &status, 0);
             vTaskDelay(pdMS_TO_TICKS(1000));
 
             status = 0;
-            xQueueSend(xQueueBtn, &status, 0);
+            xQueueSend(xQueueMacro, &status, 0);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
-void rotate_task(void *p) {
+void scroll_task(void *p) {
     static const int8_t state_table[] = {
         0, -1,  1,  0,
         1,  0,  0, -1,
@@ -362,14 +387,11 @@ void rotate_task(void *p) {
                 if (++debounce_counter > 1) {  // Check if the same movement is read consecutively
                     if (sum == 1) {
                         printf("RIGHT\n");
-                        /*
-                        uart_putc_raw(uart0, 3);
-                        uart_putc_raw(uart0, 2);
-                        uart_putc_raw(uart0, 0);
-                        uart_putc_raw(uart0, -1);
-                        */
+
+                        xQueueSend(xQueueScroll, 1, 0);
                     } else if (sum == -1) {
                         printf("LEFT\n");
+                        xQueueSend(xQueueScroll, 2, 0);
                         /*
                         uart_putc_raw(uart0, 3);
                         uart_putc_raw(uart0, 3);
@@ -388,24 +410,60 @@ void rotate_task(void *p) {
         vTaskDelay(pdMS_TO_TICKS(1)); // Poll every 1 ms to improve responsiveness
     }
 }
+void btn_lock_task(void *p) {
+    gpio_init(BTN_LOCK);
+    gpio_set_dir(BTN_LOCK, GPIO_IN);
+    gpio_pull_up(BTN_LOCK);
+    while(1){
+        if (gpio_get(BTN_LOCK) == 0){
+            if (camera_lock_flag == 0){
+                camera_lock_flag = 1;
+            } else {
+                camera_lock_flag = 0;
+            }
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+void btn_line_task(void *p) {
+    gpio_init(BTN_LINE);
+    gpio_set_dir(BTN_LINE, GPIO_IN);
+    gpio_pull_up(BTN_LINE);
+    while(1){
+        if (gpio_get(BTN_LINE) == 0){
+            printf("LINE\n");
+            xQueueSend(xQueueLine, 1, 0);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 
 int main() {
     stdio_init_all();
 
     printf("Start bluetooth task\n");
+
+
 /*
-    xTaskCreate(task_tes, "Task Teste", 4096, NULL, 1, NULL);
-        xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
+    xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
+    xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(task_macro, "Macro_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(btn_line_task, "Line_Task", 4096, NULL, 1, NULL);
 */
 
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xQueueIMU = xQueueCreate(32, sizeof(adc_t));
-    xQueueBtn = xQueueCreate(32, sizeof(int));
+    xQueueMacro = xQueueCreate(32, sizeof(int));
+    xQueueLine = xQueueCreate(32, sizeof(int));
+    xQueueScroll = xQueueCreate(32, sizeof(int));
 
-    xTaskCreate(rotate_task, "Rotate_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(scroll_task, "Rotate_Task", 4096, NULL, 1, NULL);
 
 
     vTaskStartScheduler();
