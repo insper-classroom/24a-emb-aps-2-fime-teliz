@@ -37,6 +37,9 @@ const char IMU_Y_HW_ID = 2;
 const char ADC_HW_ID = 3;
 const char EOP = -1;
 
+const int ENCA_PIN = 17;
+const int ENCB_PIN = 16;
+
 volatile int camera_lock_flag = 0;
 
 typedef struct adc {
@@ -277,21 +280,66 @@ FusionVector accelerometer = {
     }
 }
 
-void task_tes( void *p) {
-    int pino_meio = 14;
-    int pino_fim = 15;
+void rotate_task(void *p) {
+    static const int8_t state_table[] = {
+        0, -1,  1,  0,
+        1,  0,  0, -1,
+        -1,  0,  0,  1,
+        0,  1, -1,  0
+    };
+    uint8_t enc_state = 0; // Current state of the encoder
+    int8_t last_encoded = 0; // Last encoded state
+    int8_t encoded;
+    int sum;
+    int last_sum = 0; // Last non-zero sum to filter out noise
+    int debounce_counter = 0; // Debounce counter
 
-    gpio_init(pino_meio);
-    gpio_init(pino_fim);
-    gpio_set_dir(pino_meio, GPIO_IN);
-    gpio_set_dir(pino_fim, GPIO_IN);
-    while(1){
-        if (gpio_get(pino_meio)){
-            printf("Meio\n");
+    // Initialize GPIO pins for the encoder
+    gpio_init(ENCA_PIN);
+    gpio_init(ENCB_PIN);
+
+    gpio_set_dir(ENCA_PIN, GPIO_IN);
+    gpio_set_dir(ENCB_PIN, GPIO_IN);
+
+    gpio_pull_up(ENCA_PIN);  // Enable internal pull-up
+    gpio_pull_up(ENCB_PIN);  // Enable internal pull-up
+
+    last_encoded = (gpio_get(ENCA_PIN) << 1) | gpio_get(ENCB_PIN);
+
+    while (1) {
+        encoded = (gpio_get(ENCA_PIN) << 1) | gpio_get(ENCB_PIN);
+        enc_state = (enc_state << 2) | encoded;
+        sum = state_table[enc_state & 0x0f];
+
+        if (sum != 0) {
+            if (sum == last_sum) {
+                if (++debounce_counter > 1) {  // Check if the same movement is read consecutively
+                    if (sum == 1) {
+                        printf("RIGHT\n");
+                        /*
+                        uart_putc_raw(uart0, 3);
+                        uart_putc_raw(uart0, 2);
+                        uart_putc_raw(uart0, 0);
+                        uart_putc_raw(uart0, -1);
+                        */
+                    } else if (sum == -1) {
+                        printf("LEFT\n");
+                        /*
+                        uart_putc_raw(uart0, 3);
+                        uart_putc_raw(uart0, 3);
+                        uart_putc_raw(uart0, 0);
+                        uart_putc_raw(uart0, -1);
+                        */
+                    }
+                    debounce_counter = 0;  // Reset the counter after confirming the direction
+                }
+            } else {
+                debounce_counter = 0;  // Reset the counter if the direction changes
+            }
+            last_sum = sum;  // Update last_sum to the current sum
         }
-        if (gpio_get(pino_fim)){
-            printf("Fim\n");
-        }
+
+        vTaskDelay(pdMS_TO_TICKS(1)); // Poll every 1 ms to improve responsiveness
     }
 }
 int main() {
@@ -300,13 +348,14 @@ int main() {
     printf("Start bluetooth task\n");
 /*
     xTaskCreate(task_tes, "Task Teste", 4096, NULL, 1, NULL);
+    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
+    xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
+    xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
 */
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xQueueIMU = xQueueCreate(32, sizeof(adc_t));
-    xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
-    xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    xTaskCreate(hc06_task, "UART_Task 1", 4096, NULL, 1, NULL);
+    xTaskCreate(rotate_task, "Rotate_Task", 4096, NULL, 1, NULL);
 
 
     vTaskStartScheduler();
