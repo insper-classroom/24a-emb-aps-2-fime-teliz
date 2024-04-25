@@ -163,9 +163,9 @@ void x_adc_task(void *p) {
 
         }
         data.axis = 1;
-        xQueueSend(xQueueAdc, &data, portMAX_DELAY);
+        xQueueSend(xQueueAdc, &data, 10);
         ////////printf("X: %d\n", data.val);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -189,9 +189,9 @@ void y_adc_task(void *p) {
 
         }
         data.axis = 0;
-        xQueueSend(xQueueAdc, &data, portMAX_DELAY);
+        xQueueSend(xQueueAdc, &data, 10);
         ////////printf("Y: %d\n", data.val);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -220,11 +220,11 @@ void hc06_task(void *p) {
         else{
             adc_t data_ADC_HC06;
             xQueueAdc = xQueueCreate(10, sizeof(adc_t));
-            xQueueReceive(xQueueAdc, &data_ADC_HC06, portMAX_DELAY);
+            xQueueReceive(xQueueAdc, &data_ADC_HC06, 10);
 
             adc_t data_IMU_HC06;
             xQueueIMU = xQueueCreate(10, sizeof(adc_t));
-            xQueueReceive(xQueueIMU, &data_IMU_HC06, portMAX_DELAY);
+            xQueueReceive(xQueueIMU, &data_IMU_HC06, 10);
 
 
         }
@@ -327,14 +327,14 @@ FusionVector accelerometer = {
                 newdatar = (int) euler.angle.roll;
                 imuData.val = newdatar - oldatar;
                 imuData.axis = 1;
-                xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+                xQueueSend(xQueueIMU, &imuData, 10);
                 count = 0;
             }
         count ++;
         }
         imuData.val = (int) euler.angle.yaw;
         imuData.axis = 0;
-        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+        xQueueSend(xQueueIMU, &imuData, 10);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
