@@ -5,6 +5,7 @@ ser = serial.Serial('COM8', 115200)
 
 
 try:
+    pyautogui.PAUSE = 0
     # sync package
     while True:
         print('Waiting for sync package...')
@@ -56,6 +57,22 @@ try:
                     elif value == 0:
                         pyautogui.keyUp('w')
                         pyautogui.keyUp('s')
+            if data == b'\x04':
+                data = ser.read(1)
+                value = int.from_bytes(data, byteorder='big', signed=True)
+                if value == 1:
+                    pyautogui.mouseDown(button='right')
+
+            pyautogui.mouseUp(button='right')
+
+            if data == b'\x05':
+                data = ser.read(1)
+                value = int.from_bytes(data, byteorder='big', signed=True)
+                if value == 1:
+
+
+
+                
 
 except KeyboardInterrupt:
     print("Program terminated by user")
