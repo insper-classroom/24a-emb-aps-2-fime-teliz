@@ -26,6 +26,10 @@
 #define deadzone 220
 #define SAMPLE_PERIOD 0.05f
 
+const int UART_TX_PIN = 0;
+const int UART_RX_PIN = 1;
+
+
 volatile int ADC_X = 26;
 volatile int ADC_Y = 27;
 const int MPU_ADDRESS = 0x68;
@@ -86,6 +90,10 @@ void uart_task(void *p) {
     int macroData;
     int lineData;
     int scrollData;
+    uart_init(uart0, 115200);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    
     while (1) {
         if (xQueueReceive(xQueueAdc, &adcData, 10)) {
             int axis = adcData.axis;
@@ -156,7 +164,7 @@ void x_adc_task(void *p) {
         }
         data.axis = 1;
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        //printf("X: %d\n", data.val);
+        ////////printf("X: %d\n", data.val);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -182,7 +190,7 @@ void y_adc_task(void *p) {
         }
         data.axis = 0;
         xQueueSend(xQueueAdc, &data, portMAX_DELAY);
-        //printf("Y: %d\n", data.val);
+        ////////printf("Y: %d\n", data.val);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -201,10 +209,10 @@ void hc06_task(void *p) {
         //uart_puts(HC06_UART_ID, "OLAAA ");
         if (connected == 0){
             if (hc05_check_connection()){
-            printf("Connected\n");
+            ////printf("Connected\n");
             connected = 1;
             } else {
-                printf("Not connected\n");
+                //printg("Not connected\n");
 
             };
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -386,11 +394,11 @@ void scroll_task(void *p) {
             if (sum == last_sum) {
                 if (++debounce_counter > 1) {  // Check if the same movement is read consecutively
                     if (sum == 1) {
-                        printf("RIGHT\n");
+                        //////printf("RIGHT\n");
 
                         xQueueSend(xQueueScroll, 1, 0);
                     } else if (sum == -1) {
-                        printf("LEFT\n");
+                        //////printf("LEFT\n");
                         xQueueSend(xQueueScroll, 2, 0);
                         /*
                         uart_putc_raw(uart0, 3);
@@ -433,7 +441,7 @@ void btn_line_task(void *p) {
     gpio_pull_up(BTN_LINE);
     while(1){
         if (gpio_get(BTN_LINE) == 0){
-            printf("LINE\n");
+            //////printf("LINE\n");
             xQueueSend(xQueueLine, 1, 0);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -443,7 +451,7 @@ void btn_line_task(void *p) {
 int main() {
     stdio_init_all();
 
-    printf("Start bluetooth task\n");
+    //////printf("Start bluetooth task\n");
 
 
 /*
