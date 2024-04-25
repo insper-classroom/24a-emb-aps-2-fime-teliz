@@ -134,15 +134,15 @@ void uart_task(void *p) {
                 uart_putc_raw(uart0, 5);
                 uart_putc_raw(uart0, btnData);
                 uart_putc_raw(uart0, EOP);
-            } else if (btnData == 31){
+            } else if (btnData == 235){
                 uart_putc_raw(uart0, 4);
                 uart_putc_raw(uart0, 1);
                 uart_putc_raw(uart0, EOP);
-            } else if (btnData == 11){
+            } else if (btnData == 49){
                 uart_putc_raw(uart0, 6);
                 uart_putc_raw(uart0, 1);
                 uart_putc_raw(uart0, EOP);
-            } else if (btnData == 12){
+            } else if (btnData == 12544){
                 uart_putc_raw(uart0, 6);
                 uart_putc_raw(uart0, 2);
                 uart_putc_raw(uart0, EOP);
@@ -466,7 +466,7 @@ void btn_line_task(void *p) {
     while(1){
         if (gpio_get(BTN_LINE) == 0){
             //////printf("LINE\n");
-            xQueueSend(xQueueBtn, 31, portMAX_DELAY);
+            xQueueSend(xQueueBtn, 0x04, portMAX_DELAY);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
