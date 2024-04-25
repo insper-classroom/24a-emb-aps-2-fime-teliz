@@ -60,11 +60,12 @@ typedef struct movement {
     int y;
 } movement_t;
 
-QueueHandle_t xQueueMacro;
+
 QueueHandle_t xQueueAdc;
 QueueHandle_t xQueueIMU;
-QueueHandle_t xQueueLine;
-QueueHandle_t xQueueScroll;
+QueueHandle_t xQueueBtn;
+
+
 movement_t *movement;
 
 
@@ -87,15 +88,13 @@ void macro_task(void *p){
 void uart_task(void *p) {
     adc_t adcData;
     adc_t imuData;
-    int macroData;
-    int lineData;
-    int scrollData;
+    int btnData;
     uart_init(uart0, 115200);
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
     
     while (1) {
-        if (xQueueReceive(xQueueAdc, &adcData, 10)) {
+        if (xQueueReceive(xQueueAdc, &adcData, 1)) {
             int axis = adcData.axis;
             int val = adcData.val;
 
@@ -125,23 +124,48 @@ void uart_task(void *p) {
                 uart_putc_raw(uart0, EOP);
             }
         }
-        if (xQueueReceive(xQueueMacro, &macroData, 10)) {
-            uart_putc_raw(uart0, 5);
-            uart_putc_raw(uart0, macroData);
-            uart_putc_raw(uart0, EOP);
+        if (xQueueReceive(xQueueBtn, &btnData, 1)) {
+            // se data for 0 ou 1, entao é o botao de macro
+            // se data for 31, entao é o botao de linha
+            // se data for 11 ou 12, entao é o botao de rotação
+
+            
+            if (btnData == 0 || btnData == 1){
+                uart_putc_raw(uart0, 5);
+                uart_putc_raw(uart0, btnData);
+                uart_putc_raw(uart0, EOP);
+            } else if (btnData == 31){
+                uart_putc_raw(uart0, 4);
+                uart_putc_raw(uart0, 1);
+                uart_putc_raw(uart0, EOP);
+            } else if (btnData == 11){
+                uart_putc_raw(uart0, 6);
+                uart_putc_raw(uart0, 1);
+                uart_putc_raw(uart0, EOP);
+            } else if (btnData == 12){
+                uart_putc_raw(uart0, 6);
+                uart_putc_raw(uart0, 2);
+                uart_putc_raw(uart0, EOP);
+            }
         }
-        if (xQueueReceive(xQueueLine, &lineData, 10)) {
-            uart_putc_raw(uart0, 4);
-            uart_putc_raw(uart0, lineData);
-            uart_putc_raw(uart0, EOP);
-        }
-        if (xQueueReceive(xQueueScroll, &scrollData, 10)) {
-            uart_putc_raw(uart0, 6);
-            uart_putc_raw(uart0, scrollData);
-            uart_putc_raw(uart0, EOP);
-        }
+        // if (xQueueReceive(xQueueMacro, &macroData, 10)) {
+        //     uart_putc_raw(uart0, 5);
+        //     uart_putc_raw(uart0, macroData);
+        //     uart_putc_raw(uart0, EOP);
+        // }
+        // if (xQueueReceive(xQueueLine, &lineData, 10)) {
+        //     uart_putc_raw(uart0, 4);
+        //     uart_putc_raw(uart0, lineData);
+        //     uart_putc_raw(uart0, EOP);
+        // }
+        // if (xQueueReceive(xQueueScroll, &scrollData, 10)) {
+        //     uart_putc_raw(uart0, 6);
+        //     uart_putc_raw(uart0, scrollData);
+        //     uart_putc_raw(uart0, EOP);
+        // }
 
     }
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 void x_adc_task(void *p) {
@@ -160,12 +184,12 @@ void x_adc_task(void *p) {
             data.val = 0; // resultado pode ser 2 ou -2 (vai ser lido pelo python)
         }else{            
             data.val = 2*result/abs(result); // resultado pode ser 2 ou -2 (vai ser lido pelo python)
-
+            data.axis = 1;
+            xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         }
-        data.axis = 1;
-        xQueueSend(xQueueAdc, &data, 10);
+        
         ////////printf("X: %d\n", data.val);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -186,12 +210,12 @@ void y_adc_task(void *p) {
             data.val = 0; // resultado pode ser 2 ou -2 (vai ser lido pelo python)
         }else{            
             data.val = 2*result/abs(result); // resultado pode ser 2 ou -2 (vai ser lido pelo python)
-
+            xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         }
         data.axis = 0;
-        xQueueSend(xQueueAdc, &data, 10);
+        
         ////////printf("Y: %d\n", data.val);
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -220,11 +244,11 @@ void hc06_task(void *p) {
         else{
             adc_t data_ADC_HC06;
             xQueueAdc = xQueueCreate(10, sizeof(adc_t));
-            xQueueReceive(xQueueAdc, &data_ADC_HC06, 10);
+            xQueueReceive(xQueueAdc, &data_ADC_HC06, portMAX_DELAY);
 
             adc_t data_IMU_HC06;
             xQueueIMU = xQueueCreate(10, sizeof(adc_t));
-            xQueueReceive(xQueueIMU, &data_IMU_HC06, 10);
+            xQueueReceive(xQueueIMU, &data_IMU_HC06, portMAX_DELAY);
 
 
         }
@@ -327,14 +351,14 @@ FusionVector accelerometer = {
                 newdatar = (int) euler.angle.roll;
                 imuData.val = newdatar - oldatar;
                 imuData.axis = 1;
-                xQueueSend(xQueueIMU, &imuData, 10);
+                xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
                 count = 0;
             }
         count ++;
         }
         imuData.val = (int) euler.angle.yaw;
         imuData.axis = 0;
-        xQueueSend(xQueueIMU, &imuData, 10);
+        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -349,11 +373,11 @@ void task_macro( void *p) {
     while(1){
         if (gpio_get(BTN_MACRO) == 0){
             status = 1;
-            xQueueSend(xQueueMacro, &status, 0);
+            xQueueSend(xQueueBtn, &status, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(1000));
 
             status = 0;
-            xQueueSend(xQueueMacro, &status, 0);
+            xQueueSend(xQueueBtn, &status, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -396,10 +420,10 @@ void scroll_task(void *p) {
                     if (sum == 1) {
                         //////printf("RIGHT\n");
 
-                        xQueueSend(xQueueScroll, 1, 0);
+                        xQueueSend(xQueueBtn, 11, 10);
                     } else if (sum == -1) {
                         //////printf("LEFT\n");
-                        xQueueSend(xQueueScroll, 2, 0);
+                        xQueueSend(xQueueBtn, 12, 10);
                         /*
                         uart_putc_raw(uart0, 3);
                         uart_putc_raw(uart0, 3);
@@ -442,7 +466,7 @@ void btn_line_task(void *p) {
     while(1){
         if (gpio_get(BTN_LINE) == 0){
             //////printf("LINE\n");
-            xQueueSend(xQueueLine, 1, 0);
+            xQueueSend(xQueueBtn, 31, portMAX_DELAY);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -467,9 +491,7 @@ int main() {
 
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xQueueIMU = xQueueCreate(32, sizeof(adc_t));
-    xQueueMacro = xQueueCreate(32, sizeof(int));
-    xQueueLine = xQueueCreate(32, sizeof(int));
-    xQueueScroll = xQueueCreate(32, sizeof(int));
+    xQueueBtn = xQueueCreate(32, sizeof(int));
 
     xTaskCreate(scroll_task, "Rotate_Task", 4096, NULL, 1, NULL);
 
