@@ -21,8 +21,8 @@ try:
                 data = ser.read(2)
                 value = int.from_bytes(data, byteorder='big', signed=True)
                 value *= 21.3
-                print(f"X: {value}")
-                #pyautogui.move(value, 0)
+                #print(f"X: {value}")
+                pyautogui.move(value, 0)
             if data == b'\x02':
                 data = ser.read(1) 
                 value = int.from_bytes(data, byteorder='big', signed=True)
