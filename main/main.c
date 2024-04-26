@@ -69,22 +69,6 @@ QueueHandle_t xQueueBtn;
 movement_t *movement;
 
 
-void macro_task(void *p){
-
-    // configurar botao balalalalala
-    while(1) {
-        if (gpio_get(14) == 0){
-            // coloca dado na fila do botao falando que ele foi pressionado 
-            vTaskDelay(pdMS_TO_TICKS(100));
-        } else {
-
-
-        }
-
-    }
-
-}
-
 void uart_task(void *p) {
     adc_t adcData;
     adc_t imuData;
@@ -148,21 +132,6 @@ void uart_task(void *p) {
                 uart_putc_raw(uart0, EOP);
             }
         }
-        // if (xQueueReceive(xQueueMacro, &macroData, 10)) {
-        //     uart_putc_raw(uart0, 5);
-        //     uart_putc_raw(uart0, macroData);
-        //     uart_putc_raw(uart0, EOP);
-        // }
-        // if (xQueueReceive(xQueueLine, &lineData, 10)) {
-        //     uart_putc_raw(uart0, 4);
-        //     uart_putc_raw(uart0, lineData);
-        //     uart_putc_raw(uart0, EOP);
-        // }
-        // if (xQueueReceive(xQueueScroll, &scrollData, 10)) {
-        //     uart_putc_raw(uart0, 6);
-        //     uart_putc_raw(uart0, scrollData);
-        //     uart_putc_raw(uart0, EOP);
-        // }
 
     }
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -418,28 +387,19 @@ void scroll_task(void *p) {
             if (sum == last_sum) {
                 if (++debounce_counter > 1) {  // Check if the same movement is read consecutively
                     if (sum == 1) {
-                        //////printf("RIGHT\n");
-
                         xQueueSend(xQueueBtn, 11, 10);
                     } else if (sum == -1) {
-                        //////printf("LEFT\n");
                         xQueueSend(xQueueBtn, 12, 10);
-                        /*
-                        uart_putc_raw(uart0, 3);
-                        uart_putc_raw(uart0, 3);
-                        uart_putc_raw(uart0, 0);
-                        uart_putc_raw(uart0, -1);
-                        */
+                        debounce_counter = 0;  // Reset the counter after confirming the direction
                     }
-                    debounce_counter = 0;  // Reset the counter after confirming the direction
+                } else {
+                    debounce_counter = 0;  // Reset the counter if the direction changes
                 }
-            } else {
-                debounce_counter = 0;  // Reset the counter if the direction changes
-            }
             last_sum = sum;  // Update last_sum to the current sum
-        }
+            }
 
         vTaskDelay(pdMS_TO_TICKS(1)); // Poll every 1 ms to improve responsiveness
+        }
     }
 }
 void btn_lock_task(void *p) {
@@ -477,12 +437,16 @@ int main() {
 
     //////printf("Start bluetooth task\n");
 
+/* coloque as tasks inativas aqui
+    
+    xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
+*/
 
+    
 
+    xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    //xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
-    xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
     xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
     xTaskCreate(task_macro, "Macro_Task", 4096, NULL, 1, NULL);
     xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
