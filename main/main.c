@@ -293,6 +293,8 @@ void mpu6050_task(void *p) {
     int newdatar;
     int oldatay;
     int newdatay;
+    int delta_roll;
+    int delta_yaw;
 
     while (1) {
         mpu6050_read_raw(acceleration, gyro, &temp);
@@ -312,18 +314,37 @@ FusionVector accelerometer = {
 
         const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
-        if (camera_lock_flag == 0){
-            if(count == 0){
+        // if (camera_lock_flag == 0){
+        //     if(count == 0){
+        //     oldatar = (int) euler.angle.roll;
+        //     }
+        //     else if(count == 9){
+        //         newdatar = (int) euler.angle.roll;
+        //         imuData.val = newdatar - oldatar;
+        //         imuData.axis = 1;
+        //         xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+        //         count = 0;
+        //     }
+        // count ++;
+        // }
+        // imuData.val = (int) euler.angle.yaw;
+        // imuData.axis = 0;
+        // xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+        
+        //printf("Roll: %f, Pitch: %f, Yaw: %f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
+        if(count == 0){
             oldatar = (int) euler.angle.roll;
-            }
-            else if(count == 9){
-                newdatar = (int) euler.angle.roll;
-                imuData.val = newdatar - oldatar;
-                imuData.axis = 1;
-                xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-                count = 0;
-            }
-        count ++;
+        }else if(count == 3){
+            newdatar = (int) euler.angle.roll;
+            delta_roll = newdatar - oldatar;
+            count = -1;
+        }
+        count++;
+        printf("old: %d, new: %d, delta: %d\n", oldatar, newdatar, delta_roll);
+        if(abs(newdatar) > 60 && abs(delta_roll) > 25){
+            imuData.val = 1;
+            imuData.axis = 1;
+            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         }
         imuData.val = (int) euler.angle.yaw;
         imuData.axis = 0;
@@ -438,19 +459,19 @@ int main() {
     //////printf("Start bluetooth task\n");
 
 /* coloque as tasks inativas aqui
-    
+    xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
+    xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
+    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(task_macro, "Macro_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(btn_line_task, "Line_Task", 4096, NULL, 1, NULL);    
     xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
 */
 
     
 
     xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
-    xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
-    xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
-    xTaskCreate(task_macro, "Macro_Task", 4096, NULL, 1, NULL);
-    xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
-    xTaskCreate(btn_line_task, "Line_Task", 4096, NULL, 1, NULL);
+
 
 
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
