@@ -317,7 +317,7 @@ FusionVector accelerometer = {
             count = -1;
         }
         count++;
-        if(abs(newdatar) > 60 && abs(delta_roll) > 25){
+        if(abs(newdatar) > 75){
             imuData.val = 1;
         }
         else{
