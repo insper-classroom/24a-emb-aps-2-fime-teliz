@@ -319,9 +319,12 @@ FusionVector accelerometer = {
         count++;
         if(abs(newdatar) > 60 && abs(delta_roll) > 25){
             imuData.val = 1;
-            imuData.axis = 1;
-            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         }
+        else{
+            imuData.val = 0;
+        }
+        imuData.axis = 1;
+        xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         imuData.val = (int) euler.angle.yaw;
         imuData.axis = 0;
         xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
