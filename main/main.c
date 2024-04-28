@@ -92,20 +92,15 @@ void uart_task(void *p) {
             int msb = val >> 8; 
             int lsb = val & 0xFF;
             if (imuData.axis == 0) {
-                if (val>75){
-                uart_putc_raw(uart0, IMU_Y_HW_ID);
-                uart_putc_raw(uart0, 1);
-                uart_putc_raw(uart0, EOP);
-                }else{
-                    uart_putc_raw(uart0, IMU_Y_HW_ID);
-                    uart_putc_raw(uart0, 0);
-                    uart_putc_raw(uart0, EOP);
-                }
-            } else {
-                uart_putc_raw(uart0, IMU_X_HW_ID);
+               uart_putc_raw(uart0, IMU_X_HW_ID);
                 uart_putc_raw(uart0, msb);
                 uart_putc_raw(uart0, lsb);
                 uart_putc_raw(uart0, EOP);
+            } else {
+                uart_putc_raw(uart0, IMU_Y_HW_ID);
+                uart_putc_raw(uart0, 1);
+                uart_putc_raw(uart0, EOP);
+                
             }
         }
         if (xQueueReceive(xQueueBtn, &btnData, 1)) {
@@ -314,24 +309,6 @@ FusionVector accelerometer = {
 
         const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
 
-        // if (camera_lock_flag == 0){
-        //     if(count == 0){
-        //     oldatar = (int) euler.angle.roll;
-        //     }
-        //     else if(count == 9){
-        //         newdatar = (int) euler.angle.roll;
-        //         imuData.val = newdatar - oldatar;
-        //         imuData.axis = 1;
-        //         xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-        //         count = 0;
-        //     }
-        // count ++;
-        // }
-        // imuData.val = (int) euler.angle.yaw;
-        // imuData.axis = 0;
-        // xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-        
-        //printf("Roll: %f, Pitch: %f, Yaw: %f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
         if(count == 0){
             oldatar = (int) euler.angle.roll;
         }else if(count == 3){
@@ -340,7 +317,6 @@ FusionVector accelerometer = {
             count = -1;
         }
         count++;
-        printf("old: %d, new: %d, delta: %d\n", oldatar, newdatar, delta_roll);
         if(abs(newdatar) > 60 && abs(delta_roll) > 25){
             imuData.val = 1;
             imuData.axis = 1;
