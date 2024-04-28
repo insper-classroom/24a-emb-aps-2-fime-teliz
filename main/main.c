@@ -26,6 +26,8 @@
 #define deadzone 220
 #define SAMPLE_PERIOD 0.05f
 
+#define uart uart0
+
 const int UART_TX_PIN = 0;
 const int UART_RX_PIN = 1;
 
@@ -82,24 +84,24 @@ void uart_task(void *p) {
             int axis = adcData.axis;
             int val = adcData.val;
 
-            uart_putc_raw(uart0, ADC_HW_ID);
-            uart_putc_raw(uart0, axis);
-            uart_putc_raw(uart0, val);
-            uart_putc_raw(uart0, EOP);
+            uart_putc_raw(uart, ADC_HW_ID);
+            uart_putc_raw(uart, axis);
+            uart_putc_raw(uart, val);
+            uart_putc_raw(uart, EOP);
         }
         if (xQueueReceive(xQueueIMU, &imuData, 10)) {
             int val = imuData.val;
             int msb = val >> 8; 
             int lsb = val & 0xFF;
             if (imuData.axis == 0) {
-               uart_putc_raw(uart0, IMU_X_HW_ID);
-                uart_putc_raw(uart0, msb);
-                uart_putc_raw(uart0, lsb);
-                uart_putc_raw(uart0, EOP);
+               uart_putc_raw(uart, IMU_X_HW_ID);
+                uart_putc_raw(uart, msb);
+                uart_putc_raw(uart, lsb);
+                uart_putc_raw(uart, EOP);
             } else {
-                uart_putc_raw(uart0, IMU_Y_HW_ID);
-                uart_putc_raw(uart0, 1);
-                uart_putc_raw(uart0, EOP);
+                uart_putc_raw(uart, IMU_Y_HW_ID);
+                uart_putc_raw(uart, 1);
+                uart_putc_raw(uart, EOP);
                 
             }
         }
@@ -110,21 +112,21 @@ void uart_task(void *p) {
 
             
             if (btnData == 0 || btnData == 1){
-                uart_putc_raw(uart0, 5);
-                uart_putc_raw(uart0, btnData);
-                uart_putc_raw(uart0, EOP);
+                uart_putc_raw(uart, 5);
+                uart_putc_raw(uart, btnData);
+                uart_putc_raw(uart, EOP);
             } else if (btnData == 235){
-                uart_putc_raw(uart0, 4);
-                uart_putc_raw(uart0, 1);
-                uart_putc_raw(uart0, EOP);
+                uart_putc_raw(uart, 4);
+                uart_putc_raw(uart, 1);
+                uart_putc_raw(uart, EOP);
             } else if (btnData == 49){
-                uart_putc_raw(uart0, 6);
-                uart_putc_raw(uart0, 1);
-                uart_putc_raw(uart0, EOP);
+                uart_putc_raw(uart, 6);
+                uart_putc_raw(uart, 1);
+                uart_putc_raw(uart, EOP);
             } else if (btnData == 12544){
-                uart_putc_raw(uart0, 6);
-                uart_putc_raw(uart0, 2);
-                uart_putc_raw(uart0, EOP);
+                uart_putc_raw(uart, 6);
+                uart_putc_raw(uart, 2);
+                uart_putc_raw(uart, EOP);
             }
         }
 
@@ -293,17 +295,17 @@ void mpu6050_task(void *p) {
 
     while (1) {
         mpu6050_read_raw(acceleration, gyro, &temp);
- FusionVector gyroscope = {
-    .axis.x = gyro[0] / 131.0f, // Conversão para graus/s
-    .axis.y = gyro[1] / 131.0f,
-    .axis.z = gyro[2] / 131.0f,
-};
+        FusionVector gyroscope = {
+            .axis.x = gyro[0] / 131.0f, // Conversão para graus/s
+            .axis.y = gyro[1] / 131.0f,
+            .axis.z = gyro[2] / 131.0f,
+        };
 
-FusionVector accelerometer = {
-    .axis.x = acceleration[0] / 16384.0f, // Conversão para g
-    .axis.y = acceleration[1] / 16384.0f,
-    .axis.z = acceleration[2] / 16384.0f,
-};      
+        FusionVector accelerometer = {
+            .axis.x = acceleration[0] / 16384.0f, // Conversão para g
+            .axis.y = acceleration[1] / 16384.0f,
+            .axis.z = acceleration[2] / 16384.0f,
+        };      
 
         FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, SAMPLE_PERIOD);
 
