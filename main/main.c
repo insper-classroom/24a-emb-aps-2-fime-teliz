@@ -319,6 +319,13 @@ void mpu6050_task(void *p) {
             count = -1;
         }
         count++;
+        printf("old: %d, new: %d, delta: %d\n", oldatar, newdatar, delta_roll);
+        if(abs(newdatar) > 60 && abs(delta_roll) > 25){
+            imuData.val = 1;
+            imuData.axis = 1;
+            xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
+        }
+        count++;
         if(abs(newdatar) > 75){
             imuData.val = 1;
         }
