@@ -1,14 +1,14 @@
 import serial
 import pyautogui
 
-ser = serial.Serial('COM8', 115200)
-
+ser = serial.Serial('COM11', 115200)
+stateup = 1
 
 try:
     pyautogui.PAUSE = 0
     # sync package
     while True:
-        print('Waiting for sync package...')
+        # print('Waiting for sync package...')
         while True:
             data = ser.read(1)
             if data == b'\xff':
@@ -20,16 +20,19 @@ try:
             if data == b'\x01':
                 data = ser.read(2)
                 value = int.from_bytes(data, byteorder='big', signed=True)
-                value *= 21.3
                 #print(f"X: {value}")
-                pyautogui.move(value, 0)
+                #pyautogui.move(value, 0)
             if data == b'\x02':
                 data = ser.read(1) 
                 value = int.from_bytes(data, byteorder='big', signed=True)
-                if value == 1:
+                if value == 1 and stateup == 1:
                     pyautogui.mouseDown()
+                    print(f"click{value}")
+                    state = 0
                 elif value == 0:
                     pyautogui.mouseUp()
+                    state = 1
+                    print(f"soltou click{value}")
             if data == b'\x03':
                 data = ser.read(1)
                 value = int.from_bytes(data, byteorder='big', signed=True)
