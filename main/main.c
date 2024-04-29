@@ -100,7 +100,7 @@ void uart_task(void *p) {
                 uart_putc_raw(uart, EOP);
             } else {
                 uart_putc_raw(uart, IMU_Y_HW_ID);
-                uart_putc_raw(uart, 1);
+                uart_putc_raw(uart, imuData.val);
                 uart_putc_raw(uart, EOP);
                 
             }
