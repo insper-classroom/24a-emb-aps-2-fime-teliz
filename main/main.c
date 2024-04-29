@@ -37,7 +37,7 @@ volatile int ADC_Y = 27;
 const int MPU_ADDRESS = 0x68;
 const int I2C_SDA_GPIO = 4;
 const int I2C_SCL_GPIO = 5;
-const int BTN_MACRO = 15;
+const int BTN_MACRO = 20;
 
 const char IMU_X_HW_ID = 1;
 const char IMU_Y_HW_ID = 2;
@@ -112,18 +112,22 @@ void uart_task(void *p) {
 
             
             if (btnData == 0 || btnData == 1){
+                // printf("MACRO\n");
                 uart_putc_raw(uart, 5);
                 uart_putc_raw(uart, btnData);
                 uart_putc_raw(uart, EOP);
             } else if (btnData == 235){
+                // printf("LINE\n");
                 uart_putc_raw(uart, 4);
                 uart_putc_raw(uart, 1);
                 uart_putc_raw(uart, EOP);
             } else if (btnData == 49){
+                // printf("RIGHT\n");
                 uart_putc_raw(uart, 6);
                 uart_putc_raw(uart, 1);
                 uart_putc_raw(uart, EOP);
             } else if (btnData == 12544){
+                // printf("LEFT\n");
                 uart_putc_raw(uart, 6);
                 uart_putc_raw(uart, 2);
                 uart_putc_raw(uart, EOP);
@@ -154,7 +158,7 @@ void x_adc_task(void *p) {
             xQueueSend(xQueueAdc, &data, portMAX_DELAY);
         }
         
-        ////////printf("X: %d\n", data.val);
+        // printf("X: %d\n", data.val);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -180,7 +184,7 @@ void y_adc_task(void *p) {
         }
         data.axis = 0;
         
-        ////////printf("Y: %d\n", data.val);
+        // printf("Y: %d\n", data.val);
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -327,8 +331,9 @@ void mpu6050_task(void *p) {
         }
         imuData.axis = 1;
         xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
-        imuData.val = (int) euler.angle.yaw;
+        imuData.val = euler.angle.yaw;
         imuData.axis = 0;
+        // printf("Yaw: %d\n", (int) imuData.val);
         xQueueSend(xQueueIMU, &imuData, portMAX_DELAY);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -344,10 +349,12 @@ void task_macro( void *p) {
     while(1){
         if (gpio_get(BTN_MACRO) == 0){
             status = 1;
+            // printf("MACRO\n");
             xQueueSend(xQueueBtn, &status, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(1000));
 
             status = 0;
+            // printf("macro\n");
             xQueueSend(xQueueBtn, &status, portMAX_DELAY);
             vTaskDelay(pdMS_TO_TICKS(100));
         }
@@ -389,19 +396,23 @@ void scroll_task(void *p) {
             if (sum == last_sum) {
                 if (++debounce_counter > 1) {  // Check if the same movement is read consecutively
                     if (sum == 1) {
+                        // printf("RIGHT\n");
                         xQueueSend(xQueueBtn, 11, 10);
+                        vTaskDelay(pdMS_TO_TICKS(100));
                     } else if (sum == -1) {
+                        // printf("LEFT\n");
                         xQueueSend(xQueueBtn, 12, 10);
-                        debounce_counter = 0;  // Reset the counter after confirming the direction
+                        vTaskDelay(pdMS_TO_TICKS(100));
                     }
-                } else {
-                    debounce_counter = 0;  // Reset the counter if the direction changes
+                    debounce_counter = 0;  // Reset the counter after confirming the direction
                 }
-            last_sum = sum;  // Update last_sum to the current sum
+            } else {
+                debounce_counter = 0;  // Reset the counter if the direction changes
             }
+            last_sum = sum;  // Update last_sum to the current sum
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1)); // Poll every 1 ms to improve responsiveness
-        }
     }
 }
 void btn_lock_task(void *p) {
@@ -411,9 +422,11 @@ void btn_lock_task(void *p) {
     while(1){
         if (gpio_get(BTN_LOCK) == 0){
             if (camera_lock_flag == 0){
+                // printf("LOCK\n");
                 camera_lock_flag = 1;
             } else {
                 camera_lock_flag = 0;
+                // printf("UNLOCK\n");
             }
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
@@ -427,7 +440,7 @@ void btn_line_task(void *p) {
     gpio_pull_up(BTN_LINE);
     while(1){
         if (gpio_get(BTN_LINE) == 0){
-            //////printf("LINE\n");
+            // printf("LINE\n");
             xQueueSend(xQueueBtn, 0x04, portMAX_DELAY);
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -439,27 +452,28 @@ int main() {
 
     //////printf("Start bluetooth task\n");
 
+    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
 /* coloque as tasks inativas aqui
-    
     xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
+
 */
-
     
-
-    xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);
     xTaskCreate(y_adc_task, "ADC_Task 2", 4096, NULL, 1, NULL);
-    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(mpu6050_task, "MPU6050_Task", 4096, NULL, 1, NULL);
     xTaskCreate(task_macro, "Macro_Task", 4096, NULL, 1, NULL);
-    xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
     xTaskCreate(btn_line_task, "Line_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(btn_lock_task, "Lock_Task", 4096, NULL, 1, NULL);
+    xTaskCreate(scroll_task, "Rotate_Task", 4096, NULL, 1, NULL);
 
+
+
+    
 
     xQueueAdc = xQueueCreate(32, sizeof(adc_t));
     xQueueIMU = xQueueCreate(32, sizeof(adc_t));
     xQueueBtn = xQueueCreate(32, sizeof(int));
 
-    xTaskCreate(scroll_task, "Rotate_Task", 4096, NULL, 1, NULL);
 
 
     vTaskStartScheduler();
