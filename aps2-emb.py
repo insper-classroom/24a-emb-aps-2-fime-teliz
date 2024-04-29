@@ -20,7 +20,6 @@ try:
             if data == b'\x01':
                 data = ser.read(2)
                 value = int.from_bytes(data, byteorder='big', signed=True)
-                print(f"X: {value}")
                 value *=-10
                 pydirectinput.move(value, 0)
             if data == b'\x02':
@@ -28,7 +27,6 @@ try:
                 value = int.from_bytes(data, byteorder='big', signed=True)
                 if value == 1 and stateup == 1:
                     pydirectinput.mouseDown()
-                    print(f"click{value}")
                     stateup = 0
                 elif value == 0:
                     pydirectinput.mouseUp()
@@ -73,10 +71,8 @@ try:
                 value = int.from_bytes(data, byteorder='big', signed=True)
                 if value == 1:
                     pydirectinput.mouseDown()
-                    print("abaixou")
                 elif value == 0:
                     pydirectinput.mouseUp()
-                    print("levantou")
             if data == b'\x06':
                 data = ser.read(1)
                 value = int.from_bytes(data, byteorder='big', signed=True)
