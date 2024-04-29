@@ -23,7 +23,7 @@
 #include "hc05.h"
 #include "hc05.c"
 
-#define deadzone 220
+#define deadzone 225
 #define SAMPLE_PERIOD 0.05f
 
 #define uart uart0
@@ -51,6 +51,8 @@ const int BTN_LINE = 18;
 const int BTN_LOCK = 19;
 
 volatile int camera_lock_flag = 0;
+volatile int jurumeu_flag = 0;
+volatile int state_line = 0;
 
 typedef struct adc {
     int axis;
@@ -93,12 +95,14 @@ void uart_task(void *p) {
             int val = imuData.val;
             int msb = val >> 8; 
             int lsb = val & 0xFF;
-            if (imuData.axis == 0) {
-               uart_putc_raw(uart, IMU_X_HW_ID);
+            
+            if (imuData.axis == 0 && camera_lock_flag == 0) {
+            uart_putc_raw(uart, IMU_X_HW_ID);
                 uart_putc_raw(uart, msb);
                 uart_putc_raw(uart, lsb);
                 uart_putc_raw(uart, EOP);
-            } else {
+        
+            } else if (jurumeu_flag ==0){
                 uart_putc_raw(uart, IMU_Y_HW_ID);
                 uart_putc_raw(uart, imuData.val);
                 uart_putc_raw(uart, EOP);
@@ -119,7 +123,7 @@ void uart_task(void *p) {
             } else if (btnData == 235){
                 // printf("LINE\n");
                 uart_putc_raw(uart, 4);
-                uart_putc_raw(uart, 1);
+                uart_putc_raw(uart, state_line);
                 uart_putc_raw(uart, EOP);
             } else if (btnData == 49){
                 // printf("RIGHT\n");
@@ -142,6 +146,7 @@ void x_adc_task(void *p) {
     adc_t data;
     adc_init();
     adc_gpio_init(ADC_X);
+    int esto_mandando_dado = 0;
 
     while (1) {
         adc_select_input(0); // Select ADC input 0 (GPIO26)
@@ -152,10 +157,15 @@ void x_adc_task(void *p) {
 
         if (abs(result) < deadzone) {
             data.val = 0; // resultado pode ser 2 ou -2 (vai ser lido pelo python)
+            if (esto_mandando_dado == 1){
+                xQueueSend(xQueueAdc, &data, portMAX_DELAY);
+                esto_mandando_dado = 0;
+            }
         }else{            
             data.val = 2*result/abs(result); // resultado pode ser 2 ou -2 (vai ser lido pelo python)
             data.axis = 1;
             xQueueSend(xQueueAdc, &data, portMAX_DELAY);
+            esto_mandando_dado = 1;
         }
         
         // printf("X: %d\n", data.val);
@@ -167,6 +177,7 @@ void y_adc_task(void *p) {
     adc_t data;
     adc_init();
     adc_gpio_init(ADC_Y);
+    int estou_mandando_dado = 0;
 
     while (1) {
         adc_select_input(1); // Select ADC input 1 (GPIO27)
@@ -178,9 +189,14 @@ void y_adc_task(void *p) {
         
         if (abs(result) < deadzone) {
             data.val = 0; // resultado pode ser 2 ou -2 (vai ser lido pelo python)
+            if (estou_mandando_dado == 1){
+                xQueueSend(xQueueAdc, &data, portMAX_DELAY);
+                estou_mandando_dado = 0;
+            }
         }else{            
             data.val = 2*result/abs(result); // resultado pode ser 2 ou -2 (vai ser lido pelo python)
             xQueueSend(xQueueAdc, &data, portMAX_DELAY);
+            estou_mandando_dado = 1;
         }
         data.axis = 0;
         
@@ -348,6 +364,7 @@ void task_macro( void *p) {
     gpio_pull_up(BTN_MACRO);
     while(1){
         if (gpio_get(BTN_MACRO) == 0){
+            jurumeu_flag = 1;
             status = 1;
             // printf("MACRO\n");
             xQueueSend(xQueueBtn, &status, portMAX_DELAY);
@@ -356,9 +373,11 @@ void task_macro( void *p) {
             status = 0;
             // printf("macro\n");
             xQueueSend(xQueueBtn, &status, portMAX_DELAY);
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }else{
+            jurumeu_flag = 0;
             vTaskDelay(pdMS_TO_TICKS(100));
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 void scroll_task(void *p) {
@@ -439,9 +458,14 @@ void btn_line_task(void *p) {
     gpio_set_dir(BTN_LINE, GPIO_IN);
     gpio_pull_up(BTN_LINE);
     while(1){
-        if (gpio_get(BTN_LINE) == 0){
+        if (gpio_get(BTN_LINE) == 0 && state_line == 0){
             // printf("LINE\n");
             xQueueSend(xQueueBtn, 0x04, portMAX_DELAY);
+            state_line = 1;
+        }
+        if (gpio_get(BTN_LINE) == 1 && state_line == 1){
+            xQueueSend(xQueueBtn, 0x04, portMAX_DELAY);
+            state_line = 0;
         }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
