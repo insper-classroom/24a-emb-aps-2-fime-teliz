@@ -26,7 +26,8 @@
 #define deadzone 225
 #define SAMPLE_PERIOD 0.05f
 
-#define uart uart0
+#define uart uart1
+#define BAUDRATE 9600
 
 const int UART_TX_PIN = 0;
 const int UART_RX_PIN = 1;
@@ -77,11 +78,14 @@ void uart_task(void *p) {
     adc_t adcData;
     adc_t imuData;
     int btnData;
-    uart_init(uart0, 115200);
+    uart_init(uart, BAUDRATE);
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+
+    
     
     while (1) {
+        
         if (xQueueReceive(xQueueAdc, &adcData, 1)) {
             int axis = adcData.axis;
             int val = adcData.val;
@@ -207,15 +211,22 @@ void y_adc_task(void *p) {
 
 
 
-void hc06_task(void *p) {
-    int connected=1;
+void hc05_task(void *p) {
+    int connected = 0;
+    int data_sent = 0;
+    int idle_counter = 0;
     uart_init(hc05_UART_ID, hc05_BAUD_RATE);
     gpio_set_function(hc05_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(hc05_RX_PIN, GPIO_FUNC_UART);
+    adc_t adcData;
+    adc_t imuData;
+    int btnData;
+
     
     hc05_init("vara_de_pesca", "0000");
 
     while (true) {
+        data_sent = 0;
         //uart_puts(HC06_UART_ID, "OLAAA ");
         if (connected == 0){
             if (hc05_check_connection()){
@@ -228,17 +239,76 @@ void hc06_task(void *p) {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
         else{
-            adc_t data_ADC_HC06;
-            xQueueAdc = xQueueCreate(10, sizeof(adc_t));
-            xQueueReceive(xQueueAdc, &data_ADC_HC06, portMAX_DELAY);
+            if (xQueueReceive(xQueueAdc, &adcData, 1)) {
+                int axis = adcData.axis;
+                int val = adcData.val;
 
-            adc_t data_IMU_HC06;
-            xQueueIMU = xQueueCreate(10, sizeof(adc_t));
-            xQueueReceive(xQueueIMU, &data_IMU_HC06, portMAX_DELAY);
+                uart_putc_raw(uart, ADC_HW_ID);
+                uart_putc_raw(uart, axis);
+                uart_putc_raw(uart, val);
+                uart_putc_raw(uart, EOP);
+                data_sent = 1;
+            }
+            if (xQueueReceive(xQueueIMU, &imuData, 10)) {
+                int val = imuData.val;
+                int msb = val >> 8; 
+                int lsb = val & 0xFF;
+                
+                if (imuData.axis == 0 && camera_lock_flag == 0) {
+                    uart_putc_raw(uart, IMU_X_HW_ID);
+                    uart_putc_raw(uart, msb);
+                    uart_putc_raw(uart, lsb);
+                    uart_putc_raw(uart, EOP);
+                    data_sent = 1;
+            
+                } else if (jurumeu_flag ==0){
+                    uart_putc_raw(uart, IMU_Y_HW_ID);
+                    uart_putc_raw(uart, imuData.val);
+                    uart_putc_raw(uart, EOP);
+                    data_sent = 1;
+                }
+            }
+            if (xQueueReceive(xQueueBtn, &btnData, 1)) {
+                // se data for 0 ou 1, entao é o botao de macro
+                // se data for 31, entao é o botao de linha
+                // se data for 11 ou 12, entao é o botao de rotação
 
-
+                
+                if (btnData == 0 || btnData == 1){
+                    // printf("MACRO\n");
+                    uart_putc_raw(uart, 5);
+                    uart_putc_raw(uart, btnData);
+                    uart_putc_raw(uart, EOP);
+                    data_sent = 1;
+                } else if (btnData == 235){
+                    // printf("LINE\n");
+                    uart_putc_raw(uart, 4);
+                    uart_putc_raw(uart, state_line);
+                    uart_putc_raw(uart, EOP);
+                    data_sent = 1;
+                } else if (btnData == 49){
+                    // printf("RIGHT\n");
+                    uart_putc_raw(uart, 6);
+                    uart_putc_raw(uart, 1);
+                    uart_putc_raw(uart, EOP);
+                    data_sent = 1;
+                } else if (btnData == 12544){
+                    // printf("LEFT\n");
+                    uart_putc_raw(uart, 6);
+                    uart_putc_raw(uart, 2);
+                    uart_putc_raw(uart, EOP);
+                    data_sent = 1;
+                }
+            }
+            if (data_sent == 0){
+                idle_counter++;
+                if (idle_counter > 10){
+                    connected = 0;
+                    idle_counter = 0;
+                }
+            }
         }
-
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 static void mpu6050_reset() {
@@ -476,10 +546,10 @@ int main() {
 
     //////printf("Start bluetooth task\n");
 
-    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
-/* coloque as tasks inativas aqui
     xTaskCreate(hc05_task, "HC_Task 1", 4096, NULL, 1, NULL);
+/* coloque as tasks inativas aqui
 
+    xTaskCreate(uart_task, "UART_Task", 4096, NULL, 1, NULL);
 */
     
     xTaskCreate(x_adc_task, "ADC_Task 1", 4096, NULL, 1, NULL);

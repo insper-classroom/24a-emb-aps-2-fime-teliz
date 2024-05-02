@@ -3,7 +3,7 @@ import pydirectinput
 import pyautogui
 
 stateup = 1
-ser = serial.Serial('COM11', 115200)
+ser = serial.Serial('COM11', 9600)
 try:
     pydirectinput.PAUSE = 0
     # sync package
